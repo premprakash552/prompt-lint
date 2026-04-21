@@ -77,6 +77,53 @@ Only Anthropic gives **exact** token counts (via their count_tokens endpoint). G
 
 ---
 
+## Environment variables
+
+Everything lives in a single `.env` file at the project root. Copy the template and edit:
+
+```bash
+cp .env.example .env
+```
+
+Full contents of `.env.example` — every variable the app reads:
+
+```bash
+# Default provider if --provider is not passed on the CLI
+PROVIDER=ollama
+
+# --- Anthropic (paid) ---
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+
+# --- Groq (free tier, fast) — get a key at https://console.groq.com ---
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.3-70b-versatile
+
+# --- Ollama (fully free, local) — install from https://ollama.com then: `ollama pull llama3.2` ---
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+```
+
+### Reference
+
+| Variable             | Required for      | Default                          | Description                                                                       |
+|----------------------|-------------------|----------------------------------|-----------------------------------------------------------------------------------|
+| `PROVIDER`           | —                 | `anthropic`                      | Which provider to use when `--provider` is not passed. One of `anthropic`, `groq`, `ollama`. |
+| `ANTHROPIC_API_KEY`  | `anthropic`       | —                                | Your Anthropic API key. Get one at https://console.anthropic.com.                 |
+| `ANTHROPIC_MODEL`    | `anthropic`       | `claude-haiku-4-5-20251001`      | Any Claude model ID. Haiku is cheapest and fine for rewriting.                    |
+| `GROQ_API_KEY`       | `groq`            | —                                | Your Groq API key. Free tier at https://console.groq.com.                         |
+| `GROQ_MODEL`         | `groq`            | `llama-3.3-70b-versatile`        | Any Groq-hosted model. Try `llama-3.1-8b-instant` for faster / cheaper.           |
+| `OLLAMA_BASE_URL`    | `ollama`          | `http://localhost:11434`         | URL where Ollama is running. Change only if remote or non-default port.           |
+| `OLLAMA_MODEL`       | `ollama`          | `llama3.2`                       | Any pulled Ollama model (`ollama list`). `qwen2.5:7b` is recommended.             |
+
+Rules of thumb:
+
+- You only need credentials for the provider(s) you'll actually use. Fill one, leave the others blank.
+- CLI flags win over env vars: `--provider groq --model llama-3.1-8b-instant` overrides `PROVIDER`/`GROQ_MODEL` for that invocation.
+- **Never commit `.env`.** It's already in `.gitignore`. If a key leaks, rotate it at the provider console immediately.
+
+---
+
 ## Usage
 
 ```bash
