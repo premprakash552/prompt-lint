@@ -1,0 +1,29 @@
+{
+  "name": "promptlint",
+  "version": "0.2.0",
+  "description": "A Grammarly-style linter for LLM prompts. Detects token-wasters and rewrites prompts for clarity and efficiency. Supports Anthropic, Groq, and Ollama.",
+  "author": {
+    "name": "Prem Prakash",
+    "email": "prem.prakash552@gmail.com"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "promptlint": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "prompt",
+    "llm",
+    "optimization",
+    "token",
+    "anthropic",
+    "groq",
+    "ollama"
+  ],
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
