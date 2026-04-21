@@ -1,7 +1,7 @@
 {
   "name": "promptlint",
-  "version": "0.2.0",
-  "description": "A Grammarly-style linter for LLM prompts. Detects token-wasters and rewrites prompts for clarity and efficiency. Supports Anthropic, Groq, and Ollama.",
+  "version": "0.0.1",
+  "description": "A linter for LLM prompts. Detects token-wasters and rewrites prompts for clarity and efficiency. Supports Anthropic, Groq, and Ollama.",
   "author": {
     "name": "Prem Prakash",
     "email": "prem.prakash552@gmail.com"

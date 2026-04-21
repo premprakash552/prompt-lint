@@ -2,11 +2,18 @@
 import dotenv from "dotenv";
 dotenv.config({ override: true });
 import { readFileSync } from "node:fs";
-import { analyze } from "./heuristics.js";
+import { analyze, summarize } from "./heuristics.js";
 import { getProvider, resolveConfig, PROVIDER_NAMES } from "./providers/index.js";
 
 function parseArgs(argv) {
-  const args = { file: null, prompt: null, json: false, provider: null, model: null };
+  const args = {
+    file: null,
+    prompt: null,
+    json: false,
+    provider: null,
+    model: null,
+    maxTokens: null,
+  };
   const rest = argv.slice(2);
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
@@ -14,6 +21,7 @@ function parseArgs(argv) {
     else if (a === "--json") args.json = true;
     else if (a === "--provider" || a === "-p") args.provider = rest[++i];
     else if (a === "--model" || a === "-m") args.model = rest[++i];
+    else if (a === "--max-tokens") args.maxTokens = Number(rest[++i]);
     else if (a === "--help" || a === "-h") args.help = true;
     else if (!args.prompt) args.prompt = a;
   }
@@ -35,11 +43,13 @@ Options:
   -f, --file <path>       Read prompt from a file
   -p, --provider <name>   LLM provider: ${PROVIDER_NAMES.join(", ")} (default: anthropic)
   -m, --model <name>      Override the model for the chosen provider
+      --max-tokens <n>    Token budget for cost-limit rule (default: 500)
       --json              Emit machine-readable JSON
   -h, --help              Show this help
 
 Env (.env):
   PROVIDER                 Default provider if --provider omitted
+  MAX_TOKENS               Default token budget for cost-limit rule
   ANTHROPIC_API_KEY        Required for anthropic
   ANTHROPIC_MODEL          Optional (default: claude-haiku-4-5-20251001)
   GROQ_API_KEY             Required for groq — free tier at console.groq.com
@@ -68,25 +78,52 @@ function pct(original, optimized) {
   return Math.round(((original - optimized) / original) * 100);
 }
 
+const SEVERITY_MARK = { error: "✖", warn: "!", info: "•" };
+
 function renderHuman(out) {
-  const { original, rewritten, issues, tokensBefore, tokensAfter, changes, notes, providerName, model, tokenCountExact } = out;
+  const {
+    original,
+    rewritten,
+    issues,
+    summary,
+    tokensBefore,
+    tokensAfter,
+    changes,
+    notes,
+    providerName,
+    model,
+    tokenCountExact,
+    maxTokens,
+  } = out;
   const saved = tokensBefore - tokensAfter;
   const pctSaved = pct(tokensBefore, tokensAfter);
   const tokenMark = tokenCountExact ? "" : " (est.)";
 
-  console.log(`\nProvider: ${providerName}  Model: ${model}`);
+  console.log(`\nProvider: ${providerName}  Model: ${model}  Budget: ${maxTokens} tokens`);
 
   console.log("\n── ORIGINAL ─────────────────────────────────────────");
   console.log(original);
   console.log(`\nTokens: ${tokensBefore}${tokenMark}`);
 
   console.log("\n── HEURISTIC ISSUES ─────────────────────────────────");
-  if (issues.length) {
-    for (const i of issues) {
-      console.log(`  • ${i.label} (${i.count}): ${i.samples.join(", ")}`);
-    }
-  } else {
+  if (!summary.total) {
     console.log("  (none)");
+  } else {
+    const { bySeverity, categoryStats, total } = summary;
+    console.log(
+      `  Total: ${total}  (errors: ${bySeverity.error}, warnings: ${bySeverity.warn}, info: ${bySeverity.info})`,
+    );
+    for (const stat of categoryStats) {
+      if (!stat.count) continue;
+      console.log(
+        `\n  ${stat.category.toUpperCase()} — ${stat.count} issue${stat.count === 1 ? "" : "s"} (${stat.pct}% of total)`,
+      );
+      for (const i of stat.issues) {
+        const mark = SEVERITY_MARK[i.severity] || "•";
+        const samples = i.samples.length ? `: ${i.samples.join(", ")}` : "";
+        console.log(`    ${mark} [${i.severity}] ${i.label} (${i.count})${samples}`);
+      }
+    }
   }
 
   console.log("\n── REWRITTEN ────────────────────────────────────────");
@@ -126,7 +163,11 @@ async function main() {
   const config = resolveConfig(provider);
   if (args.model) config.model = args.model;
 
-  const issues = analyze(prompt);
+  const maxTokens =
+    Number.isFinite(args.maxTokens) && args.maxTokens > 0
+      ? args.maxTokens
+      : Number(process.env.MAX_TOKENS) || 500;
+
   const [tokensBefore, rewriteResult] = await Promise.all([
     provider.countTokens({ ...config, text: prompt }),
     provider.rewrite({ ...config, prompt }),
@@ -136,13 +177,18 @@ async function main() {
     text: rewriteResult.rewritten,
   });
 
+  const issues = analyze(prompt, { tokens: tokensBefore, maxTokens });
+  const summary = summarize(issues);
+
   const output = {
     providerName: provider.name,
     model: config.model,
     tokenCountExact: !!provider.tokenCountExact,
+    maxTokens,
     original: prompt,
     rewritten: rewriteResult.rewritten,
     issues,
+    summary,
     tokensBefore,
     tokensAfter,
     changes: rewriteResult.changes || [],

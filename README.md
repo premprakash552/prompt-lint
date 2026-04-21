@@ -1,8 +1,8 @@
 # promptlint
 
-A Grammarly-style linter **for LLM prompts**. Point it at a prompt and it will:
+A linter **for LLM prompts**. Point it at a prompt and it will:
 
-1. Detect filler, redundant politeness, hedging, and other token-wasters using local regex rules (free, instant).
+1. Run the prompt through a suite of local heuristic rules grouped into four categories — **security**, **quality**, **completeness**, and **cost** — each issue tagged with a severity (`error` / `warn` / `info`). No network calls, instant, free.
 2. Ask a small LLM to rewrite the prompt so it uses fewer tokens while preserving exact intent.
 3. Show you the token savings and an itemised list of every change, with reasons.
 
@@ -91,6 +91,9 @@ Full contents of `.env.example` — every variable the app reads:
 # Default provider if --provider is not passed on the CLI
 PROVIDER=ollama
 
+# Default token budget for the cost-limit check (override per-call with --max-tokens)
+MAX_TOKENS=500
+
 # --- Anthropic (paid) ---
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
@@ -109,6 +112,7 @@ OLLAMA_MODEL=llama3.2
 | Variable             | Required for      | Default                          | Description                                                                       |
 |----------------------|-------------------|----------------------------------|-----------------------------------------------------------------------------------|
 | `PROVIDER`           | —                 | `anthropic`                      | Which provider to use when `--provider` is not passed. One of `anthropic`, `groq`, `ollama`. |
+| `MAX_TOKENS`         | —                 | `500`                            | Token budget for the cost-limit check. Overridden by `--max-tokens`.              |
 | `ANTHROPIC_API_KEY`  | `anthropic`       | —                                | Your Anthropic API key. Get one at https://console.anthropic.com.                 |
 | `ANTHROPIC_MODEL`    | `anthropic`       | `claude-haiku-4-5-20251001`      | Any Claude model ID. Haiku is cheapest and fine for rewriting.                    |
 | `GROQ_API_KEY`       | `groq`            | —                                | Your Groq API key. Free tier at https://console.groq.com.                         |
@@ -140,6 +144,9 @@ cat my_prompt.txt | node src/index.js
 node src/index.js --provider groq "..."
 node src/index.js --provider ollama --model qwen2.5:7b "..."
 
+# Set a token budget — cost-limit issue fires when exceeded
+node src/index.js --max-tokens 200 "..."
+
 # Machine-readable JSON (for pipelines)
 node src/index.js --json "..." > result.json
 ```
@@ -147,7 +154,7 @@ node src/index.js --json "..." > result.json
 ### Example output
 
 ```
-Provider: ollama  Model: qwen2.5:7b
+Provider: ollama  Model: qwen2.5:7b  Budget: 500 tokens
 
 ── ORIGINAL ─────────────────────────────────────────
 Could you please kindly help me sort a list of numbers,
@@ -156,9 +163,15 @@ I was wondering if you could maybe show me a few examples
 Tokens: 29 (est.)
 
 ── HEURISTIC ISSUES ─────────────────────────────────
-  • Redundant politeness (1): Could you please kindly
-  • Filler preamble (1): I was wondering if
-  • Vague quantifier (1): a few
+  Total: 4  (errors: 0, warnings: 2, info: 2)
+
+  QUALITY — 2 issues (50% of total)
+    ! [warn] Vague quality terms (1): good
+    • [info] Hedging (1): simply
+
+  COST — 2 issues (50% of total)
+    • [info] Politeness bloat (1): Could you please kindly
+    • [info] Filler preamble (1): I was wondering if
 
 ── REWRITTEN ────────────────────────────────────────
 Sort a list of numbers. Show 3 examples.
@@ -174,6 +187,8 @@ Tokens: 10 (est.)  (-19, 65%)
       + 3 examples
 ```
 
+Each issue is tagged with a **category** (`security` · `quality` · `completeness` · `cost`) and **severity** (`error` · `warn` · `info`). The header line shows totals per severity; each category block shows its share of the total as a percentage. Output is purely informational — the CLI exits 0 even when issues are found.
+
 ---
 
 ## Options
@@ -183,6 +198,7 @@ Tokens: 10 (est.)  (-19, 65%)
 | `-f, --file <p>`   | Read prompt from a file                                  |
 | `-p, --provider`   | `anthropic` · `groq` · `ollama`                          |
 | `-m, --model`      | Override the model for the chosen provider               |
+| `--max-tokens <n>` | Token budget for the cost-limit check (default: 500)     |
 | `--json`           | Emit machine-readable JSON                               |
 | `-h, --help`       | Show help                                                |
 
